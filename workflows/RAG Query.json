@@ -1,0 +1,221 @@
+{
+  "name": "RAG Query",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag-query",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "cf1f345d-d5f2-466f-be95-22b51ca4b549",
+      "name": "Webhook",
+      "webhookId": "8714ba14-7b52-4380-80ad-ec6745c89427"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/embeddings",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"nomic-embed-text\",\n  \"prompt\": \"{{ $json.body.question }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        0
+      ],
+      "id": "92125bc6-bc10-4fc7-adb6-2de8b6c6c73a",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const embedding = $json.embedding;\nconst vectorString = '[' + embedding.join(',') + ']';\n\nreturn {\n  vector: vectorString\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "5bf653dd-08a5-449e-af58-55798a124c51",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT content, embedding <=> '{{ $json.vector }}'::vector AS distance\nFROM documents\nORDER BY distance\nLIMIT 10",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        672,
+        0
+      ],
+      "id": "30ffef14-ff46-493b-8140-41dd2a922c10",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "R2d1a0u8ZnoYwTyp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Glue all the top database chunks together into one giant string\nconst allChunks = $input.all().map(item => item.json.content);\nconst combinedContext = allChunks.join(\"\\n\\n---\\n\\n\");\n\n// 2. Get the user's question from the Webhook\nconst question = $('Webhook').first().json.body.question;\n\n// 3. Build the Master Prompt\nreturn [{\n  json: {\n    prompt: `You are an AI assistant analyzing a document. Use the provided context to answer the question. If the context seems to belong to a resume, assume the unnamed bullet points belong to the owner of the resume.\n\nContext:\n${combinedContext}\n\nQuestion: ${question}\nAnswer:`\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "id": "e13082d4-bf8a-43a0-8d25-37c1bf71056d",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_GROQ_API_KEY_HERE"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "llama-3.3-70b-versatile"
+            },
+            {
+              "name": "messages",
+              "value": "={{ [{\"role\": \"user\", \"content\": $json.prompt}] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "9acfe0e5-9d9d-4fe6-a05d-a139118809e9",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"answer\": $json.choices[0].message.content } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "75c9e934-11f7-4a4a-bfd6-8155072a2820",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f93dbebf-f064-42bd-ad74-e762d7076bc0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cc24790d6c1f5e19bb8554b7d0e769b81e56f7e900de059ab2983cd6e4f93ec6"
+  },
+  "id": "WJdxmSaUlR9wCl2A",
+  "tags": []
+}

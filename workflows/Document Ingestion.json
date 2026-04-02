@@ -1,0 +1,182 @@
+{
+  "name": "Document Ingestion",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ingest-doc",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "5a95e877-cabc-4b42-be60-d4790c8d42d8",
+      "name": "Webhook",
+      "webhookId": "cc0ab1de-f90c-42b8-8ffa-ebc1abbb8fe8"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/embeddings",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "nomic-embed-text"
+            },
+            {
+              "name": "prompt",
+              "value": "={{ $json.chunk_text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        656,
+        0
+      ],
+      "id": "71653fcf-cf7e-4142-9edc-fbd3c584954d",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO documents (content, embedding, metadata)\nVALUES (\n  '{{ $json.content }}',\n  '{{ $json.embedding }}'::vector,\n  '{{ $json.metadata }}'::jsonb\n)",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1104,
+        0
+      ],
+      "id": "4891739f-9f25-42ae-b67b-beb6639d61b4",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "R2d1a0u8ZnoYwTyp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// 1. Get the text from the Chunker using .item (matches current loop index)\nconst chunkText = $('Chunker').item.json.chunk_text;\n\n// 2. SANITIZE: Replace single quotes to prevent SQL crashes\nconst sanitizedText = chunkText.replace(/'/g, \"''\");\n\n// 3. Format the embedding vector\nconst embedding = $json.embedding;\nconst vectorString = '[' + embedding.join(',') + ']';\n\n// 4. Return the clean payload\nreturn {\n  content: sanitizedText,\n  embedding: vectorString,\n  metadata: '{\"source\": \"manual\"}'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "a185e12d-e141-4e11-8bf8-cacc708ece2b",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $input.first().json.text;\nconst chunkSize = 500;\nconst overlap = 50;\nconst chunks = [];\n\nfor (let i = 0; i < text.length; i += chunkSize - overlap) {\n  const chunk = text.slice(i, i + chunkSize);\n  if (chunk.trim().length > 0) {\n    chunks.push({ chunk_text: chunk, chunk_index: chunks.length });\n  }\n}\n\nreturn chunks.map(c => ({ json: c }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        0
+      ],
+      "id": "448534b0-53f9-4662-9fb8-c687ebf97bd1",
+      "name": "Chunker"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "file",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "f7f90221-d5e1-4591-8993-3ab23f6784b7",
+      "name": "Extract from File"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunker": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Chunker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "07a97bb0-5133-4054-8cda-c3bebc872bfe",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cc24790d6c1f5e19bb8554b7d0e769b81e56f7e900de059ab2983cd6e4f93ec6"
+  },
+  "id": "KPIHRHMHlKJHZmCY",
+  "tags": []
+}
