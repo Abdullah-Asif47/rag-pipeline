@@ -37,24 +37,24 @@ The system is decoupled into two separate, asynchronous n8n workflows communicat
 
 ### 1. Spin up the Infrastructure
 Boot the n8n orchestrator and the vector database.
-bash
+```bash
 docker compose up -d
-
+```
 
 ### 2. Start the Local Embedding Engine
 Ensure Ollama is bound to all interfaces so the Docker containers can reach it.
-bash
+```bash
 OLLAMA_HOST=0.0.0.0:11434 ollama serve &
 ollama pull nomic-embed-text
-
+```
 
 ### 3. Configure the Python Environment
 Set up the isolated environment for the frontend UI.
-bash
+```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-
+```
 
 ### 4. Activate n8n Workflows
 1. Navigate to `http://localhost:5678`.
@@ -64,8 +64,9 @@ pip install -r requirements.txt
 
 ### 5. Launch the UI
 Start the Chainlit frontend to interact with the engine.
-bash
+```bash
 chainlit run app.py
+```
 
 *Navigate to `http://localhost:8000` to upload documents and query the RAG engine.*
 
