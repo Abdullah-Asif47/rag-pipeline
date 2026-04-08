@@ -9,7 +9,6 @@ services:
     volumes:
       - "~/.n8n:/home/node/.n8n"
 
-    environment:
 environment:
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=postgres
